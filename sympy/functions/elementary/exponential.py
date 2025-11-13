@@ -490,7 +490,51 @@ class exp(ExpBase, metaclass=ExpMeta):
         arg_series = arg._eval_nseries(x, n=n, logx=logx)
         if arg_series.is_Order:
             return 1 + arg_series
-        arg0 = limit(arg_series.removeO(), x, 0)
+        series_noO = arg_series.removeO()
+
+        from sympy import Add, exp, sqrt
+        from sympy.functions.special.bessel import besselj
+
+        coeff_x = S.Zero
+        coeff_inv = S.Zero
+        const = S.Zero
+        other_term = False
+        for term in Add.make_args(arg.expand()):
+            coeff, exponent = term.as_coeff_exponent(x)
+            if exponent == 0:
+                const += coeff
+                continue
+            if not exponent.is_Integer:
+                other_term = True
+                break
+            if exponent == 1:
+                coeff_x += coeff
+            elif exponent == -1:
+                coeff_inv += coeff
+            else:
+                other_term = True
+                break
+
+        if not other_term and coeff_inv != 0:
+            m = max(int(n), 1)
+            factor = exp(const)
+            if coeff_x == 0:
+                from sympy.functions.combinatorial.factorials import factorial
+                series_terms = [factor]
+                for k in range(1, m + 1):
+                    series_terms.append(factor * coeff_inv**k / factorial(k) / x**k)
+                return Add(*series_terms)
+
+            beta = sqrt(-coeff_x*coeff_inv)
+            mu = coeff_x/beta
+            series_terms = []
+            for k in range(-m, int(n) + 1):
+                coeff_term = besselj(k, 2*beta) * mu**k
+                series_terms.append(factor * coeff_term * x**k)
+            return Add(*series_terms)
+
+        arg0 = limit(series_noO, x, 0)
+
         if arg0 is S.NegativeInfinity:
             return Order(x**n, x)
         if arg0 is S.Infinity:

@@ -7,8 +7,9 @@ from sympy.functions.elementary.exponential import (exp, log)
 from sympy.functions.elementary.hyperbolic import tanh
 from sympy.functions.elementary.miscellaneous import sqrt
 from sympy.functions.elementary.trigonometric import (cot, sin, tan)
+from sympy.functions.special.bessel import besselj, besseli
 from sympy.series.residues import residue
-from sympy.testing.pytest import XFAIL, raises
+from sympy.testing.pytest import XFAIL
 from sympy.abc import x, z, a, s, k
 
 
@@ -64,8 +65,11 @@ def test_expressions_failing():
         exp(I*pi*a/4)/factorial(n - 1)
 
 
-def test_NotImplemented():
-    raises(NotImplementedError, lambda: residue(exp(1/z), z, 0))
+def test_exp_expressions():
+    assert residue(exp(1/x), x, 0) == 1
+    assert residue(exp(2 + 1/x), x, 0) == exp(2)
+    assert residue(exp((x - 1/x)/2), x, 0) == -besselj(1, 1)
+    assert residue(exp(x/3 + 2/x), x, 0) == sqrt(6)*besseli(1, 2*sqrt(6)/3)
 
 
 def test_bug():
