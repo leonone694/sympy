@@ -3,10 +3,74 @@ This module implements the Residue function and related tools for working
 with residues.
 """
 
+from sympy.core.add import Add
+from sympy.core.function import Function
 from sympy.core.mul import Mul
 from sympy.core.singleton import S
 from sympy.core.sympify import sympify
+from sympy.core.symbol import Dummy
+from sympy.functions.combinatorial.factorials import factorial
+from sympy.functions.elementary.exponential import exp
+from sympy.functions.elementary.miscellaneous import sqrt
+from sympy.functions.special.bessel import besselj
+from sympy.concrete.summations import Sum
+from sympy.core.numbers import oo
 from sympy.utilities.timeutils import timethis
+
+
+class SeriesCoefficient(Function):
+    nargs = 3
+
+    @classmethod
+    def eval(cls, expr, sym, n):
+        expr = sympify(expr)
+        sym = sympify(sym)
+        n = sympify(n)
+        if n.is_Integer:
+            if n.is_nonnegative:
+                return expr.series(sym, 0, int(n) + 1).removeO().coeff(sym, int(n))
+            return S.Zero
+
+
+def _residue_exp_laurent(expr, x):
+    if expr.func is not exp:
+        return None
+    arg = expr.exp.expand()
+    coeff_inv = S.Zero
+    coeff_x = S.Zero
+    const = S.Zero
+    pos_poly = S.Zero
+    for term in Add.make_args(arg):
+        coeff, exponent = term.as_coeff_exponent(x)
+        if exponent == 0:
+            const += coeff
+        elif exponent == 1:
+            coeff_x += coeff
+        elif exponent == -1:
+            coeff_inv += coeff
+        elif exponent.is_Integer and exponent >= 2:
+            pos_poly += coeff * x**exponent
+        else:
+            return None
+    if coeff_inv == 0:
+        return None
+    prefactor = exp(const)
+    if pos_poly == 0:
+        if coeff_x == 0:
+            return exp(const) * coeff_inv
+        beta = sqrt(-coeff_x*coeff_inv)
+        return exp(const) * (-beta/coeff_x) * besselj(1, 2*beta)
+
+    analytic = exp(pos_poly)
+    m = Dummy('m', integer=True, nonnegative=True)
+    coeff_series = SeriesCoefficient(analytic, x, m)
+    if coeff_x == 0:
+        term = coeff_series * coeff_inv**(m + 1) / factorial(m + 1)
+    else:
+        beta = sqrt(-coeff_x*coeff_inv)
+        ratio = beta/coeff_x
+        term = coeff_series * (-1)**(m + 1) * ratio**(m + 1) * besselj(m + 1, 2*beta)
+    return prefactor * Sum(term, (m, 0, oo))
 
 
 @timethis('residue')
@@ -53,6 +117,10 @@ def residue(expr, x, x0):
     expr = sympify(expr)
     if x0 != 0:
         expr = expr.subs(x, x + x0)
+    special = _residue_exp_laurent(expr, x)
+    if special is not None:
+        return special
+
     for n in (0, 1, 2, 4, 8, 16, 32):
         s = expr.nseries(x, n=n)
         if not s.has(Order) or s.getn() >= 0:

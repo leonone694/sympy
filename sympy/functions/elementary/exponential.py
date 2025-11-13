@@ -498,6 +498,7 @@ class exp(ExpBase, metaclass=ExpMeta):
         coeff_x = S.Zero
         coeff_inv = S.Zero
         const = S.Zero
+        pos_poly = S.Zero
         other_term = False
         for term in Add.make_args(arg.expand()):
             coeff, exponent = term.as_coeff_exponent(x)
@@ -511,6 +512,8 @@ class exp(ExpBase, metaclass=ExpMeta):
                 coeff_x += coeff
             elif exponent == -1:
                 coeff_inv += coeff
+            elif exponent.is_Integer and exponent > 1:
+                pos_poly += coeff * x**exponent
             else:
                 other_term = True
                 break
@@ -518,20 +521,31 @@ class exp(ExpBase, metaclass=ExpMeta):
         if not other_term and coeff_inv != 0:
             m = max(int(n), 1)
             factor = exp(const)
+            positive_series = S.One
+            if pos_poly:
+                positive_series = self.func(pos_poly)._eval_nseries(x, n, logx)
             if coeff_x == 0:
                 from sympy.functions.combinatorial.factorials import factorial
-                series_terms = [factor]
+                series_terms = [S.One]
                 for k in range(1, m + 1):
-                    series_terms.append(factor * coeff_inv**k / factorial(k) / x**k)
-                return Add(*series_terms)
+                    series_terms.append(coeff_inv**k / factorial(k) / x**k)
+                series = Add(*series_terms)
+                result = factor * series
+                if positive_series is not S.One:
+                    result = (result * positive_series).expand()
+                return result
 
             beta = sqrt(-coeff_x*coeff_inv)
             mu = coeff_x/beta
             series_terms = []
             for k in range(-m, int(n) + 1):
                 coeff_term = besselj(k, 2*beta) * mu**k
-                series_terms.append(factor * coeff_term * x**k)
-            return Add(*series_terms)
+                series_terms.append(coeff_term * x**k)
+            series = Add(*series_terms)
+            result = factor * series
+            if positive_series is not S.One:
+                result = (result * positive_series).expand()
+            return result
 
         arg0 = limit(series_noO, x, 0)
 
